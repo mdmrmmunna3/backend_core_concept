@@ -1,13 +1,63 @@
 // professional aproch
-
+import app from "./app.js";
+import connectionDB from "./db/index.js";
 import dotenv from 'dotenv';
 dotenv.config({
     path: './env'
 })
 
-import connectionDB from "./db/index.js";
+const port = process.env.PORT || 5000;
 
-connectionDB();
+
+connectionDB()
+    .then(() => {
+
+        app.on('error', (err) => {
+            console.log('server connection error', err)
+            throw err;
+        })
+
+        app.listen(port, () => {
+            console.log(`Server is running at port : ${port}`);
+
+        })
+    })
+    .catch((err) => {
+        console.log("MONGODB Connection falied!!! ", err)
+    })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // basic aproch 
 /* dotenv.config({
