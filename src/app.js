@@ -17,4 +17,9 @@ app.use(express.static("public")) // used for store file or img in my local serv
 
 app.use(cookieParser()); // for used set and get secure cookie
 
+// routes import 
+import userRouter from './routes/user.routes.js';
+
+app.use("/api/v1/users", userRouter);
+
 export default app;
