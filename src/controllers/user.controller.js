@@ -14,19 +14,19 @@ const userRegister = asyncHandler(async (req, res) => {
      * check for image, check for avatar to get successfully in server
      * then upload in cloudinary , if no avatar check this to properly uploded
      * create user object - create entry in database
-     * remove password for refresh token filed from response
+     * remove password or refresh token filed from response
      * check for user creation 
      * retrun response 
      *  */
 
-    const { username, fullname, email, password } = req.body;
-    console.log(email, username, fullname, password);
+    const { username, fullName, email, password } = req.body;
+    // console.log(email, username, fullName, password);
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const isValid = emailRegex.test(email);
 
     if (
-        [fullname, username, email, password].some((field) => field?.trim() === "")
+        [fullName, username, email, password].some((field) => field?.trim() === "")
     ) {
         throw new ApiErrors(400, "All field are required")
     }
@@ -35,7 +35,7 @@ const userRegister = asyncHandler(async (req, res) => {
         throw new ApiErrors(405, "please input valid email")
     }
 
-    const existedUser = User.findOne({
+    const existedUser = await User.findOne({
         $or: [{ username }, { email }]
     })
     if (existedUser) {
@@ -43,23 +43,27 @@ const userRegister = asyncHandler(async (req, res) => {
     }
 
     const avatarLocalPath = req.files?.avatar[0]?.path;
-    console.log(avatarLocalPath);
-    const coverImageLoacalPath = req.files?.coverImage[0]?.path;
-    console.log(coverImageLoacalPath);
+    // console.log(avatarLocalPath);
+    // const coverImageLoacalPath = req.files?.coverImage[0]?.path;
+    // console.log(coverImageLoacalPath);
+    let coverImageLoacalPath;
+    if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
+        coverImageLoacalPath = req.files.coverImage[0].path
+    }
 
     if (!avatarLocalPath) {
         throw new ApiErrors(400, "avatar file are required")
     }
 
     const avatar = await uploadOnCloudinary(avatarLocalPath);
-    const coverImage = await uploadOnCloudinary(avatarLocalPath);
+    const coverImage = await uploadOnCloudinary(coverImageLoacalPath);
 
     if (!avatar) {
         throw new ApiErrors(400, "avatar file are required")
     }
 
     const user = await User.create({
-        fullname,
+        fullName,
         avatar: avatar?.url,
         coverImage: coverImage?.url || "",
         email,
