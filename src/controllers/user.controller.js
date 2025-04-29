@@ -5,6 +5,22 @@ import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
+
+export const generateAccessTokenAndRefreshTokens = async (userId) => {
+    try {
+        const user = await User.findById(userId);
+        const accessToken = user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+        user.refreshToken = refreshToken;
+        await user.save({ validateBeforeSave: false }) // stop keken problem
+
+        return { accessToken, refreshToken }
+
+    } catch (error) {
+        throw new ApiErrors(500, error?.message || "something went wrong while generating access token and refresh token")
+    }
+}
+
 const userRegister = asyncHandler(async (req, res) => {
     /**
      * steps
@@ -86,4 +102,63 @@ const userRegister = asyncHandler(async (req, res) => {
 
 })
 
-export { userRegister }
+const loginUser = asyncHandler(async (req, res) => {
+    /**  
+     * steps: 
+     * reg.body -> data
+     * email or username 
+     * check to find user this email or username  are match in db stored email or username data
+     * password check .. if password got worng then show error and tell a valid password in match stored db password
+     * genareate access token and refresh token 
+     * send secure cookie
+     * */
+
+    const { username, email, password } = req.body;
+
+    if (!username || !email) {
+        throw new ApiErrors(400, "username or email are required")
+    }
+
+    const user = await User.findOne({
+        $or: [{ username }, { email }]
+    });
+
+    if (!user) {
+        throw new ApiErrors(404, "username or email are not exist")
+    }
+
+    const isPasswordValid = await user.isPasswordCorrect(password)
+
+    if (!isPasswordValid) {
+        throw new ApiErrors(402, "Invalid User Credentials")
+    }
+
+    const { accessToken, refreshToken } = await generateAccessTokenAndRefreshTokens(user._id)
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
+    const options = {
+        httpOnly: true, // modify just server
+        secure: true
+    }
+
+    return res.
+        status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    user: loggedInUser, accessToken, refreshToken
+                },
+                "User logged In Successfully"
+            )
+        )
+
+})
+
+export {
+    userRegister,
+    loginUser
+}
