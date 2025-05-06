@@ -361,6 +361,132 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 })
 
 const getUserChannelProfile = asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    if (!username?.trim()) {
+        throw new ApiErrors(400, "username not found")
+    }
+
+    // define aggregate pipeline 
+    // if you get subscribers, so count channel , and get subscribedTo count subsriber 
+    const channel = await User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase()
+            }
+        },
+        // subscribers lookup pipeline 
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        // subscribeTo lookup pipeline 
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo"
+            }
+        },
+        // add both lookup pipeline field 
+        {
+            $addFields: {
+                subscriberCount: {
+                    $size: "$subscribers" // use $ sign because this is a field
+                },
+                subscribedChannelsCount: {
+                    $size: "$subscribedTo"
+                },
+                isSubscribed: {
+                    $cond: {
+                        if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        // now use $project to pass the specified file to the next 
+        {
+            $project: {
+                fullName: 1,
+                username: 1,
+                email: 1,
+                avatar: 1,
+                coverImage: 1,
+                subscriberCount: 1,
+                subscribedChannelsCount: 1,
+                isSubscribed: 1
+            }
+        }
+    ])
+
+    /* const  channel2 = await User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase()
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo"
+            }
+        },
+        {
+            $addFields: {
+                subscriberCount: {
+                    $size: "$subscribers"
+                },
+                subscribedToChannelCount: {
+                    $size: "$subscribedTo"
+                },
+                isSubscribed: {
+                    $cond: {
+                        if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                fullName: 1,
+                username: 1,
+                email: 1,
+                avatar: 1,
+                coverImage: 1,
+                subscriberCount: 1,
+                subscribedToChannelCount: 1,
+                isSubscribed: 1
+            }
+        }
+    ]) */
+
+    if (!channel?.length) {
+        throw new ApiErrors(404, "channel  does not exists")
+    }
+    console.log(channel)
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(200, channel[0], "User Channel fetched Successfully")
+        )
 
 })
 
