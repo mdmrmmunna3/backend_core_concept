@@ -79,6 +79,12 @@ const getUserRegister = asyncHandlerr(async (req, res) => {
         )
 })
 
+
+const getUserLogin = asyncHandlerr(async (req, res) => {
+
+})
+
 export {
-    getUserRegister
+    getUserRegister,
+    getUserLogin
 }
