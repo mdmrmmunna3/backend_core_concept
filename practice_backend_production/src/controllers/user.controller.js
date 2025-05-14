@@ -3,6 +3,8 @@ import { apiErr } from "../uttils/apiErr.js";
 import { User } from "../models/user.models.js";
 import { uplodedCloudinary } from "../uttils/cloudinary.js";
 import { apiRes } from "../uttils/apiRes.js";
+import jwt from "jsonwebtoken"
+import { json } from "express";
 
 export const getAccessTokenAndRefreshToken = async (userId) => {
     try {
@@ -186,8 +188,122 @@ const getUserLogout = asyncHandlerr(async (req, res) => {
         )
 })
 
+const getGenerateRefreshAccessToken = asyncHandlerr(async (req, res) => {
+    const inCommingRefreshToken = req.cookies.refreshToken || req.body?.refreshToken;
+    if (!inCommingRefreshToken) {
+        throw new apiErr(400, "Unautorized Request!")
+    }
+    try {
+        const decodedToken = jwt.verify(
+            inCommingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+        )
+        const user = await User.findById(decodedToken?._id);
+        if (!user) {
+            throw new apiErr(401, "Invalid Refresh Token")
+        }
+
+        if (inCommingRefreshToken !== user?.refreshToken) {
+            throw new apiErr(401, "refresh Token is expired and used")
+        }
+
+        const { accessToken, newRefreshTokenn } = await getAccessTokenAndRefreshToken(user?._id)
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", newRefreshTokenn, options)
+            .json(
+                new apiRes(
+                    200,
+                    {
+                        user: accessToken, refreshToken: newRefreshTokenn
+                    }
+                )
+            )
+    } catch (error) {
+        throw new apiErr(406, "Invalid RefreshToken")
+    }
+})
+
+const getCurrentChangePassword = asyncHandlerr(async (req, res) => {
+    const { oldPaasword, newPassword } = req.body;
+    if (!oldPaasword || !newPassword) {
+        throw new apiErr(402, "Old password and newPassword must be required")
+    }
+
+    const user = await User.findById(req.user?._id)
+    const isPasswordValidtion = user.isPasswordCorrect(oldPaasword)
+    if (!isPasswordValidtion) {
+        throw new apiErr(409, "Invalid Credentilas")
+    }
+
+    user.password = newPassword;
+    await user.save({ validateBeforeSave: false })
+    return res
+        .status(200)
+        .json(
+            new apiRes(
+                200,
+                {},
+                "Password cahnge successfully"
+            )
+        )
+})
+
+const getCurreentLoggedUser = asyncHandlerr(async (req, res) => {
+    return res
+        .status(200)
+        .json(
+            new apiRes(
+                200,
+                req.user,
+                "Current Logged User Data fetched Successfully"
+            )
+        )
+})
+
+const getUpdateUserAccountDetails = asyncHandlerr(async (req, res) => {
+    const { fullname, email } = req.body;
+    if (!fullname || !email) {
+        throw new apiErr(401, "All fields are required")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                fullname: fullname,
+                email: email
+            }
+        },
+        {
+            new: true
+        }
+    ).select("-password -refreshToken")
+
+    return res
+        .status(200)
+        .json(
+            new apiRes(
+                200,
+                user,
+                "Update user account details successfully"
+            )
+        )
+})
+
+
 export {
     getUserRegister,
     getUserLogin,
-    getUserLogout
+    getUserLogout,
+    getGenerateRefreshAccessToken,
+    getCurreentLoggedUser,
+    getUpdateUserAccountDetails,
+    getCurrentChangePassword
 }
