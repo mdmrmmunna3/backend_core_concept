@@ -5,6 +5,7 @@ import { uplodedCloudinary } from "../uttils/cloudinary.js";
 import { apiRes } from "../uttils/apiRes.js";
 import jwt from "jsonwebtoken"
 import { json } from "express";
+import mongoose, { Schema } from "mongoose";
 
 export const getAccessTokenAndRefreshToken = async (userId) => {
     try {
@@ -297,6 +298,186 @@ const getUpdateUserAccountDetails = asyncHandlerr(async (req, res) => {
         )
 })
 
+const getUpdateUserAvatar = asyncHandlerr(async (req, res) => {
+    const avatarLocalPathh = req.file?.path;
+    if (!avatarLocalPathh) {
+        throw new apiErr(401, "avatar is missing or required")
+    }
+
+    const cloudiAvatar = await uplodedCloudinary(avatarLocalPathh);
+    if (!cloudiAvatar?.url) {
+        throw new apiErr(404, "Something went wrong while Upload new avatar on cloudinary ")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                avatar: cloudiAvatar?.url
+            }
+        },
+        {
+            new: true
+        }
+    ).select("-password")
+
+    return res
+        .status(200)
+        .json(
+            new apiRes(200, user, "User avatar update Successfully")
+        )
+})
+
+const getUpdateUserCoverImage = asyncHandlerr(async (req, res) => {
+    const coverImageLocalPath = req.file?.path;
+    if (!coverImageLocalPath) {
+        throw new apiErr(401, "cover image is missing or required")
+    }
+
+    const cloudiCoverImage = await uplodedCloudinary(coverImageLocalPath);
+    if (!cloudiCoverImage?.url) {
+        throw new apiErr(404, "Something went wrong while Upload new cover image on cloudinary ")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                coverImage: cloudiCoverImage?.url
+            }
+        }, {
+        new: true
+    }
+    ).select("-password")
+
+    return res
+        .status(200)
+        .json(
+            new apiRes(200, user, "User Cover Image update Successfully")
+        )
+
+})
+
+const getUserChannelProfile = asyncHandlerr(async (req, res) => {
+    const { username } = req.params;
+    if (!username) {
+        throw new apiErr(404, "username not found")
+    }
+
+    const channel = await User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase()
+            }
+        },
+        // for subscriber 
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        // for suscribedTo 
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo"
+            }
+        },
+        {
+            $addFields: {
+                subscriptionCounts: {
+                    $size: "$subscribers"
+                },
+                subscribedToCounts: {
+                    $size: "$subscribedTo"
+                },
+                isPublished: {
+                    $cond: {
+                        if: { $in: [req.user?._id, "$subscibers.subscriber"] },
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                fullname: 1,
+                username: 1,
+                email: 1,
+                avatar: 1,
+                coverImage: 1,
+                subscribedToCounts: 1,
+                subscriptionCounts: 1,
+                isPublished: 1
+            }
+        }
+    ])
+
+    if (!channel?.length) {
+        throw new apiErr(404, "channel does not exists")
+    }
+
+    return res
+        .status(200)
+        .json(
+            new apiRes(200, channel[0], "User Channel profile data fetched Successfully")
+        )
+})
+
+const getUserWatchHistory = asyncHandlerr(async (req, res) => {
+    const user = await User.aggregate([
+        {
+            $match: {
+                _id: new Schema.Types.ObjectId(req.user?._id)
+            }
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "watchHistory",
+                foreignField: "_id",
+                as: "watchHistory",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                {
+                                    $project: {
+                                        fullname: 1,
+                                        username: 1,
+                                        email: 1
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        $addFields: {
+                            owner: {
+                                $first: "owner"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+    return res
+        .status(200)
+        .json(
+            new apiRes(200, user[0].watchHistory, "watch history fetched successfully")
+        )
+})
 
 export {
     getUserRegister,
@@ -304,6 +485,10 @@ export {
     getUserLogout,
     getGenerateRefreshAccessToken,
     getCurreentLoggedUser,
+    getCurrentChangePassword,
     getUpdateUserAccountDetails,
-    getCurrentChangePassword
+    getUpdateUserAvatar,
+    getUpdateUserCoverImage,
+    getUserChannelProfile,
+    getUserWatchHistory
 }
